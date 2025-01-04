@@ -1,0 +1,62 @@
+name: Build, Package, and Release
+
+on:
+  release:
+    types:
+      - created
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Set up the environment
+      - name: Set up environment
+        run: sudo apt update && sudo apt install -y build-essential python3.10-venv
+
+      # Run the setup script
+      - name: Run setup.sh
+        run: |
+          chmod +x ./setup.sh
+          ./setup.sh
+          
+      # Activate the virtual environment and install Conan dependencies
+      - name: Activate .venv and install Conan dependencies
+        run: |
+          source .venv/bin/activate
+          conan install . --build=missing
+
+      # Configure CMake
+      - name: Configure CMake
+        run: |
+          source .venv/bin/activate
+          cmake --preset conan-release
+
+      # Build the project
+      - name: Build the project
+        run: |
+          source .venv/bin/activate
+          cmake --build --preset conan-release
+
+      # Package the project using CPack
+      - name: Create DEB package
+        run: |
+          source .venv/bin/activate
+          cd build/Release
+          cpack -G DEB
+          cd -
+
+      # Upload the package as a release asset
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: _packages/hivemindsdk_${{ github.event.release.tag_name }}_amd64.deb
+          asset_name: hivemindsdk_${{ github.event.release.tag_name }}_amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
